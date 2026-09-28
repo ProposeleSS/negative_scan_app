@@ -36,7 +36,7 @@ class WizardView(QWidget):
 
 
 class WorkspaceView(QWidget):
-    def __init__(self, on_prev, on_next, on_slider_change, on_auto, on_reset, on_mono_toggle, on_invert_toggle, on_browse_output, on_export):
+    def __init__(self, on_prev, on_next, on_slider_change, on_auto, on_reset, on_mono_toggle, on_invert_toggle, on_browse_output, on_export, on_rotate, on_commit_crop):
         super().__init__()
         main_layout = QHBoxLayout(self)
 
@@ -57,7 +57,7 @@ class WorkspaceView(QWidget):
         main_layout.addLayout(canvas_panel, stretch=7)
 
         control_panel = QVBoxLayout()
-        control_panel.setSpacing(6)
+        control_panel.setSpacing(4)
 
         hist_group = QGroupBox("Live Processing Histogram")
         hist_layout = QVBoxLayout(hist_group)
@@ -65,37 +65,50 @@ class WorkspaceView(QWidget):
         hist_layout.addWidget(self.histogram)
         control_panel.addWidget(hist_group)
 
-        crop_group = QGroupBox("Four-Edge Frame Mask (Click-Drag Image too)")
+        crop_group = QGroupBox("Four-Edge Frame Mask")
         crop_layout = QVBoxLayout(crop_group)
         self.sld_crop_t = self.create_slider_row(crop_layout, "Top Trim", 0, 45)
         self.sld_crop_b = self.create_slider_row(crop_layout, "Bottom Trim", 0, 45)
         self.sld_crop_l = self.create_slider_row(crop_layout, "Left Trim", 0, 45)
         self.sld_crop_r = self.create_slider_row(crop_layout, "Right Trim", 0, 45)
-        
-        for sld in [self.sld_crop_t, self.sld_crop_b, self.sld_crop_l, self.sld_crop_r]:
-            sld.valueChanged.connect(on_slider_change)
         control_panel.addWidget(crop_group)
 
-        mode_group = QGroupBox("Inversion & Color Mode")
-        mode_layout = QVBoxLayout(mode_group)
+        # Orientation Layout Sheet (NEW: Integrated Commit Crop View trigger)
+        trans_group = QGroupBox("Orientation & Crop Commitment")
+        trans_layout = QVBoxLayout(trans_group)
+        
+        self.btn_rotate = QPushButton("⟳ Rotate 90°")
+        self.btn_rotate.setStyleSheet("background-color: #5c2d91; color: white; font-weight: bold; padding: 4px;")
+        self.btn_rotate.clicked.connect(on_rotate)
+        trans_layout.addWidget(self.btn_rotate)
+
+        self.btn_commit_crop = QPushButton("✂️ Commit Crop View: Unlocked")
+        self.btn_commit_crop.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; padding: 5px;")
+        self.btn_commit_crop.clicked.connect(on_commit_crop)
+        trans_layout.addWidget(self.btn_commit_crop)
+
         self.btn_invert = QPushButton("🔄 Invert: Active")
-        self.btn_invert.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 5px;")
+        self.btn_invert.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 4px;")
         self.btn_invert.clicked.connect(on_invert_toggle)
-        mode_layout.addWidget(self.btn_invert)
+        trans_layout.addWidget(self.btn_invert)
 
         self.btn_mono = QPushButton("🌈 Mode: Full Color")
-        self.btn_mono.setStyleSheet("background-color: #3a3a3a; font-weight: bold; padding: 5px;")
+        self.btn_mono.setStyleSheet("background-color: #3a3a3a; font-weight: bold; padding: 4px;")
         self.btn_mono.clicked.connect(on_mono_toggle)
-        mode_layout.addWidget(self.btn_mono)
-        control_panel.addWidget(mode_group)
+        trans_layout.addWidget(self.btn_mono)
+        control_panel.addWidget(trans_group)
 
-        slider_group = QGroupBox("Color Correction Matrix")
+        slider_group = QGroupBox("Color Correction & Contrast")
         slider_layout = QVBoxLayout(slider_group)
         self.sld_cr = self.create_slider_row(slider_layout, "Cyan ◄─► Red [Q/A]", -100, 100)
         self.sld_mg = self.create_slider_row(slider_layout, "Magenta ◄─► Green [W/S]", -100, 100)
         self.sld_yb = self.create_slider_row(slider_layout, "Yellow ◄─► Blue [E/D]", -100, 100)
         self.sld_exp = self.create_slider_row(slider_layout, "Exposure (Key) [R/F]", -100, 100)
-        for sld in [self.sld_cr, self.sld_mg, self.sld_yb, self.sld_exp]:
+        
+        # UPDATED: Extended parameter scale boundary configuration
+        self.sld_contrast = self.create_slider_row(slider_layout, "Contrast Scalar [T/G]", -100, 100)
+        
+        for sld in [self.sld_cr, self.sld_mg, self.sld_yb, self.sld_exp, self.sld_contrast]:
             sld.valueChanged.connect(on_slider_change)
         control_panel.addWidget(slider_group)
 

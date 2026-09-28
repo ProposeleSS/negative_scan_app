@@ -5,6 +5,7 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QCursor
 
 class InteractiveCanvas(QLabel):
     cropChanged = pyqtSignal(str, int)
+    cropReleased = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -12,13 +13,10 @@ class InteractiveCanvas(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMouseTracking(True)
 
-        self.crop_t = 0
-        self.crop_b = 0
-        self.crop_l = 0
-        self.crop_r = 0
-        
+        self.crop_t, self.crop_b, self.crop_l, self.crop_r = 0, 0, 0, 0
         self.active_edge = None
         self.is_dragging = False
+        self.hide_overlay_lines = False  # NEW: Tracks zoomed crop commitment states
         self.pixmap_rect = QRect()
 
     def update_crop_metrics(self, t, b, l, r):
@@ -34,7 +32,8 @@ class InteractiveCanvas(QLabel):
             self.pixmap_rect = QRect(x, y, w, h)
 
     def mouseMoveEvent(self, event):
-        if self.pixmap_rect.isNull() or not self.pixmap():
+        # Disable manual drag selection if crop viewing mode is committed and locked
+        if self.pixmap_rect.isNull() or not self.pixmap() or self.hide_overlay_lines:
             return
 
         pos = event.position().toPoint()
@@ -76,16 +75,17 @@ class InteractiveCanvas(QLabel):
                 self.cropChanged.emit("bottom", max(0, min(pct, 45)))
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.active_edge:
+        if event.button() == Qt.MouseButton.LeftButton and self.active_edge and not self.hide_overlay_lines:
             self.is_dragging = True
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = False
+            self.cropReleased.emit()
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        if self.pixmap_rect.isNull() or not self.pixmap():
+        if self.pixmap_rect.isNull() or not self.pixmap() or self.hide_overlay_lines:
             return
 
         painter = QPainter(self)
@@ -98,7 +98,6 @@ class InteractiveCanvas(QLabel):
 
         painter.setBrush(QBrush(QColor(0, 0, 0, 140)))
         painter.setPen(Qt.PenStyle.NoPen)
-        
         painter.drawRect(self.pixmap_rect.left(), self.pixmap_rect.top(), self.pixmap_rect.width(), y_top - self.pixmap_rect.top())
         painter.drawRect(self.pixmap_rect.left(), y_bottom, self.pixmap_rect.width(), self.pixmap_rect.bottom() - y_bottom)
         painter.drawRect(self.pixmap_rect.left(), y_top, x_left - self.pixmap_rect.left(), y_bottom - y_top)
@@ -130,12 +129,10 @@ class HistogramWidget(QWidget):
             return
 
         r_hist, g_hist, b_hist = self.hist_data
-        w = self.width()
-        h = self.height()
+        w, h = self.width(), self.height()
 
         def draw_channel_curve(hist, color):
-            if hist is None or len(hist) == 0:
-                return
+            if hist is None or len(hist) == 0: return
             max_val = np.max(hist) if np.max(hist) > 0 else 1
             painter.setPen(QPen(color, 1.5))
             points = []
