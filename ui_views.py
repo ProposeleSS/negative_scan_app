@@ -73,8 +73,7 @@ class WorkspaceView(QWidget):
         self.sld_crop_r = self.create_slider_row(crop_layout, "Right Trim", 0, 45)
         control_panel.addWidget(crop_group)
 
-        # Orientation Layout Sheet (NEW: Integrated Commit Crop View trigger)
-        trans_group = QGroupBox("Orientation & Crop Commitment")
+        trans_group = QGroupBox("Orientation & Calibration")
         trans_layout = QVBoxLayout(trans_group)
         
         self.btn_rotate = QPushButton("⟳ Rotate 90°")
@@ -104,8 +103,6 @@ class WorkspaceView(QWidget):
         self.sld_mg = self.create_slider_row(slider_layout, "Magenta ◄─► Green [W/S]", -100, 100)
         self.sld_yb = self.create_slider_row(slider_layout, "Yellow ◄─► Blue [E/D]", -100, 100)
         self.sld_exp = self.create_slider_row(slider_layout, "Exposure (Key) [R/F]", -100, 100)
-        
-        # UPDATED: Extended parameter scale boundary configuration
         self.sld_contrast = self.create_slider_row(slider_layout, "Contrast Scalar [T/G]", -100, 100)
         
         for sld in [self.sld_cr, self.sld_mg, self.sld_yb, self.sld_exp, self.sld_contrast]:

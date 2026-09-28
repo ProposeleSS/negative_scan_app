@@ -6,6 +6,8 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QCursor
 class InteractiveCanvas(QLabel):
     cropChanged = pyqtSignal(str, int)
     cropReleased = pyqtSignal()
+    # NEW: Emits true image coordinates (x, y) when clicked with Ctrl modifier held down
+    baseClicked = pyqtSignal(int, int) 
 
     def __init__(self):
         super().__init__()
@@ -16,7 +18,7 @@ class InteractiveCanvas(QLabel):
         self.crop_t, self.crop_b, self.crop_l, self.crop_r = 0, 0, 0, 0
         self.active_edge = None
         self.is_dragging = False
-        self.hide_overlay_lines = False  # NEW: Tracks zoomed crop commitment states
+        self.hide_overlay_lines = False  
         self.pixmap_rect = QRect()
 
     def update_crop_metrics(self, t, b, l, r):
@@ -32,7 +34,11 @@ class InteractiveCanvas(QLabel):
             self.pixmap_rect = QRect(x, y, w, h)
 
     def mouseMoveEvent(self, event):
-        # Disable manual drag selection if crop viewing mode is committed and locked
+        # Update cursor type dynamically to reflect pipetting tool mode if Ctrl is held down
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+            return
+
         if self.pixmap_rect.isNull() or not self.pixmap() or self.hide_overlay_lines:
             return
 
@@ -75,6 +81,19 @@ class InteractiveCanvas(QLabel):
                 self.cropChanged.emit("bottom", max(0, min(pct, 45)))
 
     def mousePressEvent(self, event):
+        # NEW: Check for pipetting activation (Ctrl + Left Click)
+        if event.button() == Qt.MouseButton.LeftButton and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            if not self.pixmap_rect.isNull() and self.pixmap():
+                pos = event.position().toPoint()
+                if self.pixmap_rect.contains(pos):
+                    # Map the screen window click position backward down into true underlying image coordinates
+                    scale_x = self.pixmap().width() / self.pixmap_rect.width()
+                    scale_y = self.pixmap().height() / self.pixmap_rect.height()
+                    img_x = int((pos.x() - self.pixmap_rect.left()) * scale_x)
+                    img_y = int((pos.y() - self.pixmap_rect.top()) * scale_y)
+                    self.baseClicked.emit(img_x, img_y)
+                    return
+
         if event.button() == Qt.MouseButton.LeftButton and self.active_edge and not self.hide_overlay_lines:
             self.is_dragging = True
 

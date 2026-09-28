@@ -1,4 +1,3 @@
-# app_controller.py
 import os
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QFileDialog
@@ -32,6 +31,7 @@ class MainApp(QMainWindow):
         )
         self.wizard = WizardView(on_folder_click=self.open_folder_dialog)
 
+        # Connect high-speed visual hooks
         self.workspace.lbl_canvas.cropChanged.connect(self.handle_mouse_crop_ui_only)
         self.workspace.lbl_canvas.cropReleased.connect(self.update_pipeline)
 
@@ -74,19 +74,27 @@ class MainApp(QMainWindow):
         os.makedirs(self.output_directory, exist_ok=True)
         filename_without_ext, _ = os.path.splitext(os.path.basename(self.file_list[self.current_idx]))
         save_path = os.path.join(self.output_directory, f"{filename_without_ext}_positive.png")
-        if self.engine.export_current_image(save_path):
-            self.statusBar().showMessage(f"Saved: {filename_without_ext}_positive.png", 2000)
+        
+        # Fetch configurations parameters from active UI
+        cr = self.workspace.sld_cr.value()
+        mg = self.workspace.sld_mg.value()
+        yb = self.workspace.sld_yb.value()
+        exp = self.workspace.sld_exp.value()
+        contrast = self.workspace.sld_contrast.value()
+        ct = self.workspace.sld_crop_t.value()
+        cb = self.workspace.sld_crop_b.value()
+        cl = self.workspace.sld_crop_l.value()
+        cr_val = self.workspace.sld_crop_r.value()
+
+        # Command engine to apply math on full master RAW asset cleanly
+        if self.engine.export_full_resolution(save_path, cr, mg, yb, exp, contrast, ct, cb, cl, cr_val):
+            self.statusBar().showMessage(f"Saved Full-Res RAW: {filename_without_ext}_positive.png", 3000)
 
     def display_current_image(self):
         if 0 <= self.current_idx < len(self.file_list):
-            # 1. Store the active crop view commitment state before loading the new file
             previous_crop_state = self.engine.is_crop_committed
-            
             if self.engine.load_file(self.file_list[self.current_idx]):
-                # 2. Force the engine to carry the view state over to the new image asset
                 self.engine.is_crop_committed = previous_crop_state
-                
-                # 3. Process and push updates to the canvas layout
                 self.update_pipeline()
 
     def navigate_image(self, direction):
@@ -112,7 +120,8 @@ class MainApp(QMainWindow):
         self.update_pipeline()
 
     def update_pipeline(self):
-        img_array = self.engine.run_pipeline(
+        # Passes configurations into the high-speed preview matrix processor loop
+        img_array = self.engine.process_preview_frame(
             self.workspace.sld_cr.value(), self.workspace.sld_mg.value(),
             self.workspace.sld_yb.value(), self.workspace.sld_exp.value(),
             contrast=self.workspace.sld_contrast.value(),
@@ -128,20 +137,10 @@ class MainApp(QMainWindow):
         w_canvas = max(self.workspace.lbl_canvas.width() - 10, 100)
         h_canvas = max(self.workspace.lbl_canvas.height() - 10, 100)
         h, w, ch = bgr_array.shape
-        
-        # FIX: Ensure memory is flat and continuous by passing native bytes
         img_bytes = bgr_array.tobytes()
-        
-        from PyQt6.QtGui import QImage, QPixmap
         qt_img = QImage(img_bytes, w, h, ch * w, QImage.Format.Format_BGR888)
-        
-        scaled_pixmap = QPixmap.fromImage(qt_img).scaled(
-            w_canvas, h_canvas, 
-            Qt.AspectRatioMode.KeepAspectRatio, 
-            Qt.TransformationMode.SmoothTransformation
-        )
+        scaled_pixmap = QPixmap.fromImage(qt_img).scaled(w_canvas, h_canvas, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.workspace.lbl_canvas.setPixmap(scaled_pixmap)
-        
         if not self.engine.is_crop_committed:
             self.workspace.lbl_canvas.update_crop_metrics(
                 self.workspace.sld_crop_t.value(), self.workspace.sld_crop_b.value(),
@@ -182,6 +181,8 @@ class MainApp(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.engine.processed_full_view is not None:
-            if self.engine.is_crop_committed and self.engine.processed_img is not None: self.render_to_canvas(self.engine.processed_img)
-            else: self.render_to_canvas(self.engine.processed_full_view)
+        if self.engine.processed_preview is not None:
+            if self.engine.is_crop_committed and self.engine.processed_roi is not None: 
+                self.render_to_canvas(self.engine.processed_roi)
+            else: 
+                self.render_to_canvas(self.engine.processed_preview) # FIX: Added the missing closing parenthesis
