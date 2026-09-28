@@ -41,6 +41,12 @@ class AppHandlers:
             window.navigate_image(-1)
         elif key == Qt.Key.Key_Right:
             window.navigate_image(1)
+            
+        # NEW HOTKEY: Press 'S' or 'Ctrl + S' to instantly save the image
+        elif key == Qt.Key.Key_S or (key == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            window.export_processed_file()
+            return True
+            
         else:
             return False
         return True

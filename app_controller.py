@@ -1,3 +1,4 @@
+# app_controller.py
 import os
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QFileDialog
@@ -7,6 +8,7 @@ from engine import ImageEngine
 from ui import WizardView, WorkspaceView
 from app_handlers import AppHandlers
 from app_ui_helpers import UIHelpers
+from app_actions import AppActions
 
 class MainApp(QMainWindow):
     def __init__(self):
@@ -14,24 +16,21 @@ class MainApp(QMainWindow):
         self.setWindowTitle("OpenFilmScan")
 
         self.engine = ImageEngine()
-        self.file_list = []
-        self.current_idx = -1
-        self.output_directory = ""
+        self.file_list, self.current_idx, self.output_directory = [], -1, ""
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
         self.workspace = WorkspaceView(
             on_prev=lambda: self.navigate_image(-1), on_next=lambda: self.navigate_image(1),
-            on_slider_change=self.update_pipeline, on_auto=self.trigger_auto_balance,
-            on_reset=self.trigger_reset, on_mono_toggle=self.toggle_monochrome_mode,
-            on_invert_toggle=self.toggle_inversion_mode, on_browse_output=self.browse_output_directory,
+            on_slider_change=self.update_pipeline, on_auto=lambda: AppActions.execute_auto_balance(self),
+            on_reset=lambda: AppActions.execute_reset(self), on_mono_toggle=lambda: AppActions.toggle_monochrome(self),
+            on_invert_toggle=lambda: AppActions.toggle_inversion(self), on_browse_output=self.browse_output_directory,
             on_export=self.export_processed_file, on_rotate=self.trigger_image_rotation,
-            on_commit_crop=self.toggle_crop_view_commitment
+            on_commit_crop=lambda: AppActions.toggle_crop_view(self)
         )
         self.wizard = WizardView(on_folder_click=self.open_folder_dialog)
 
-        # Connect high-speed visual hooks
         self.workspace.lbl_canvas.cropChanged.connect(self.handle_mouse_crop_ui_only)
         self.workspace.lbl_canvas.cropReleased.connect(self.update_pipeline)
 
@@ -57,7 +56,6 @@ class MainApp(QMainWindow):
         elif edge == "left": self.workspace.sld_crop_l.setValue(value)
         elif edge == "right": self.workspace.sld_crop_r.setValue(value)
         UIHelpers.toggle_all_sliders(self, True)
-        
         self.workspace.lbl_canvas.update_crop_metrics(
             self.workspace.sld_crop_t.value(), self.workspace.sld_crop_b.value(),
             self.workspace.sld_crop_l.value(), self.workspace.sld_crop_r.value()
@@ -74,21 +72,13 @@ class MainApp(QMainWindow):
         os.makedirs(self.output_directory, exist_ok=True)
         filename_without_ext, _ = os.path.splitext(os.path.basename(self.file_list[self.current_idx]))
         save_path = os.path.join(self.output_directory, f"{filename_without_ext}_positive.png")
-        
-        # Fetch configurations parameters from active UI
-        cr = self.workspace.sld_cr.value()
-        mg = self.workspace.sld_mg.value()
-        yb = self.workspace.sld_yb.value()
-        exp = self.workspace.sld_exp.value()
-        contrast = self.workspace.sld_contrast.value()
-        ct = self.workspace.sld_crop_t.value()
-        cb = self.workspace.sld_crop_b.value()
-        cl = self.workspace.sld_crop_l.value()
-        cr_val = self.workspace.sld_crop_r.value()
-
-        # Command engine to apply math on full master RAW asset cleanly
-        if self.engine.export_full_resolution(save_path, cr, mg, yb, exp, contrast, ct, cb, cl, cr_val):
-            self.statusBar().showMessage(f"Saved Full-Res RAW: {filename_without_ext}_positive.png", 3000)
+        if self.engine.export_full_resolution(
+            save_path, self.workspace.sld_cr.value(), self.workspace.sld_mg.value(),
+            self.workspace.sld_yb.value(), self.workspace.sld_exp.value(), self.workspace.sld_contrast.value(),
+            self.workspace.sld_crop_t.value(), self.workspace.sld_crop_b.value(),
+            self.workspace.sld_crop_l.value(), self.workspace.sld_crop_r.value()
+        ):
+            self.statusBar().showMessage(f"Saved: {filename_without_ext}_positive.png", 2000)
 
     def display_current_image(self):
         if 0 <= self.current_idx < len(self.file_list):
@@ -107,20 +97,8 @@ class MainApp(QMainWindow):
         self.engine.rotate_image()
         self.update_pipeline()
 
-    def toggle_crop_view_commitment(self):
-        self.engine.is_crop_committed = not self.engine.is_crop_committed
-        if self.engine.is_crop_committed:
-            self.workspace.btn_commit_crop.setText("✂️ Commit Crop View: ZOOMED")
-            self.workspace.btn_commit_crop.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; padding: 5px;")
-            self.workspace.lbl_canvas.hide_overlay_lines = True
-        else:
-            self.workspace.btn_commit_crop.setText("✂️ Commit Crop View: Unlocked")
-            self.workspace.btn_commit_crop.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; padding: 5px;")
-            self.workspace.lbl_canvas.hide_overlay_lines = False
-        self.update_pipeline()
-
     def update_pipeline(self):
-        # Passes configurations into the high-speed preview matrix processor loop
+        # Pass variables into the optimized, high-speed preview matrix handler
         img_array = self.engine.process_preview_frame(
             self.workspace.sld_cr.value(), self.workspace.sld_mg.value(),
             self.workspace.sld_yb.value(), self.workspace.sld_exp.value(),
@@ -131,58 +109,35 @@ class MainApp(QMainWindow):
         if img_array is not None:
             self.render_to_canvas(img_array)
             hist_arrays = self.engine.get_histogram_arrays()
-            if hist_arrays: self.workspace.histogram.update_data(hist_arrays)
+            if hist_arrays: 
+                self.workspace.histogram.update_data(hist_arrays)
 
     def render_to_canvas(self, bgr_array):
         w_canvas = max(self.workspace.lbl_canvas.width() - 10, 100)
         h_canvas = max(self.workspace.lbl_canvas.height() - 10, 100)
+        
+        # Extract explicit scalar dimensions from the incoming frame array shape
         h, w, ch = bgr_array.shape
         img_bytes = bgr_array.tobytes()
+        
+        # Safely construct the QImage using exact continuous integers
         qt_img = QImage(img_bytes, w, h, ch * w, QImage.Format.Format_BGR888)
-        scaled_pixmap = QPixmap.fromImage(qt_img).scaled(w_canvas, h_canvas, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        
+        scaled_pixmap = QPixmap.fromImage(qt_img).scaled(
+            w_canvas, h_canvas, 
+            Qt.AspectRatioMode.KeepAspectRatio, 
+            Qt.TransformationMode.SmoothTransformation
+        )
         self.workspace.lbl_canvas.setPixmap(scaled_pixmap)
+        
+        # Repaint orange bounding crop guides overlay only if not zoomed/committed
         if not self.engine.is_crop_committed:
             self.workspace.lbl_canvas.update_crop_metrics(
                 self.workspace.sld_crop_t.value(), self.workspace.sld_crop_b.value(),
                 self.workspace.sld_crop_l.value(), self.workspace.sld_crop_r.value()
             )
-
-    def toggle_inversion_mode(self):
-        self.engine.is_inverted = not self.engine.is_inverted
-        self.workspace.btn_invert.setText("🔄 Invert: Active" if self.engine.is_inverted else "⏹️ Invert: Passthrough")
-        self.update_pipeline()
-
-    def toggle_monochrome_mode(self):
-        self.engine.is_monochrome = not self.engine.is_monochrome
-        self.workspace.btn_mono.setText("⚫ Mode: Monochrome (B&W)" if self.engine.is_monochrome else "🌈 Mode: Full Color")
-        self.update_pipeline()
-
-    def trigger_auto_balance(self):
-        dr, dg, db = self.engine.calculate_grey_world_offsets()
-        UIHelpers.toggle_all_sliders(self, False)
-        self.workspace.sld_cr.setValue(max(-100, min(dr, 100)))
-        self.workspace.sld_mg.setValue(max(-100, min(dg, 100)))
-        self.workspace.sld_yb.setValue(max(-100, min(db, 100)))
-        self.workspace.sld_exp.setValue(0)
-        UIHelpers.toggle_all_sliders(self, True)
-        self.update_pipeline()
-
-    def trigger_reset(self):
-        UIHelpers.toggle_all_sliders(self, False)
-        self.engine.is_crop_committed = False
-        self.workspace.btn_commit_crop.setText("✂️ Commit Crop View: Unlocked")
-        self.workspace.btn_commit_crop.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; padding: 5px;")
-        self.workspace.lbl_canvas.hide_overlay_lines = False
-        for sld in [self.workspace.sld_crop_t, self.workspace.sld_crop_b, self.workspace.sld_crop_l, self.workspace.sld_crop_r,
-                    self.workspace.sld_cr, self.workspace.sld_mg, self.workspace.sld_yb, self.workspace.sld_exp, self.workspace.sld_contrast]:
-            sld.setValue(0)
-        UIHelpers.toggle_all_sliders(self, True)
-        self.update_pipeline()
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.engine.processed_preview is not None:
-            if self.engine.is_crop_committed and self.engine.processed_roi is not None: 
-                self.render_to_canvas(self.engine.processed_roi)
-            else: 
-                self.render_to_canvas(self.engine.processed_preview) # FIX: Added the missing closing parenthesis
+            if self.engine.is_crop_committed and self.engine.processed_roi is not None: self.render_to_canvas(self.engine.processed_roi)
+            else: self.render_to_canvas(self.engine.processed_preview)

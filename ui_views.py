@@ -1,7 +1,8 @@
+# ui_views.py
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-    QLabel, QSlider, QGroupBox, QSizePolicy, QLineEdit
+    QLabel, QSlider, QGroupBox, QSizePolicy, QLineEdit, QGridLayout
 )
 from ui_widgets import InteractiveCanvas, HistogramWidget
 
@@ -40,6 +41,7 @@ class WorkspaceView(QWidget):
         super().__init__()
         main_layout = QHBoxLayout(self)
 
+        # Left Column - Frame Display Panel
         canvas_panel = QVBoxLayout()
         self.lbl_canvas = InteractiveCanvas()
         self.lbl_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -56,70 +58,90 @@ class WorkspaceView(QWidget):
         canvas_panel.addLayout(nav_layout, stretch=0)
         main_layout.addLayout(canvas_panel, stretch=7)
 
+        # Right Column - Compact Grid Panel Layout
         control_panel = QVBoxLayout()
         control_panel.setSpacing(4)
 
-        hist_group = QGroupBox("Live Processing Histogram")
+        # Histogram Panel
+        hist_group = QGroupBox("Histogram")
         hist_layout = QVBoxLayout(hist_group)
         self.histogram = HistogramWidget()
         hist_layout.addWidget(self.histogram)
         control_panel.addWidget(hist_group)
 
-        crop_group = QGroupBox("Four-Edge Frame Mask")
-        crop_layout = QVBoxLayout(crop_group)
-        self.sld_crop_t = self.create_slider_row(crop_layout, "Top Trim", 0, 45)
-        self.sld_crop_b = self.create_slider_row(crop_layout, "Bottom Trim", 0, 45)
-        self.sld_crop_l = self.create_slider_row(crop_layout, "Left Trim", 0, 45)
-        self.sld_crop_r = self.create_slider_row(crop_layout, "Right Trim", 0, 45)
+        # Action Buttons Grid
+        tools_group = QGroupBox("Toolbox Actions")
+        tools_grid = QGridLayout(tools_group)
+        tools_grid.setSpacing(4)
+        
+        self.btn_rotate = QPushButton("⟳ Rotate")
+        self.btn_rotate.setStyleSheet("background-color: #3a3a3a; font-weight: bold; padding: 6px;")
+        self.btn_rotate.clicked.connect(on_rotate)
+        tools_grid.addWidget(self.btn_rotate, 0, 0)
+
+        self.btn_commit_crop = QPushButton("✂️ Crop")
+        self.btn_commit_crop.setCheckable(True)
+        self.btn_commit_crop.setStyleSheet("background-color: #e65100; font-weight: bold; padding: 6px;")
+        self.btn_commit_crop.clicked.connect(on_commit_crop)
+        tools_grid.addWidget(self.btn_commit_crop, 0, 1)
+
+        self.btn_invert = QPushButton("🔄 Invert")
+        self.btn_invert.setCheckable(True)
+        self.btn_invert.setChecked(True)
+        self.btn_invert.setStyleSheet("background-color: #007acc; font-weight: bold; padding: 6px;")
+        self.btn_invert.clicked.connect(on_invert_toggle)
+        tools_grid.addWidget(self.btn_invert, 0, 2)
+
+        self.btn_mono = QPushButton("⚫ Monochrome")
+        self.btn_mono.setCheckable(True)
+        self.btn_mono.setStyleSheet("background-color: #3a3a3a; font-weight: bold; padding: 6px;")
+        self.btn_mono.clicked.connect(on_mono_toggle)
+        tools_grid.addWidget(self.btn_mono, 1, 0)
+
+        self.btn_auto = QPushButton("✨ Auto")
+        self.btn_auto.setStyleSheet("background-color: #2e7d32; font-weight: bold; padding: 6px;")
+        self.btn_auto.clicked.connect(on_auto)
+        tools_grid.addWidget(self.btn_auto, 1, 1)
+
+        self.btn_reset = QPushButton("🔄 Reset")
+        self.btn_reset.setStyleSheet("background-color: #c62828; font-weight: bold; padding: 6px;")
+        self.btn_reset.clicked.connect(on_reset)
+        tools_grid.addWidget(self.btn_reset, 1, 2)
+
+        control_panel.addWidget(tools_group)
+
+        # 4-Sided Symmetrical Crop Slicing Grid
+        crop_group = QGroupBox("Mask Slicing Trim")
+        crop_grid = QGridLayout(crop_group)
+        crop_grid.setVerticalSpacing(2)
+        crop_grid.setHorizontalSpacing(8)
+        
+        self.sld_crop_t = self.create_grid_slider_row(crop_grid, "Top", 0, 0, 0, 45, default_val=0)
+        self.sld_crop_b = self.create_grid_slider_row(crop_grid, "Bottom", 0, 1, 0, 45, default_val=0)
+        self.sld_crop_l = self.create_grid_slider_row(crop_grid, "Left", 1, 0, 0, 45, default_val=0)
+        self.sld_crop_r = self.create_grid_slider_row(crop_grid, "Right", 1, 1, 0, 45, default_val=0)
+        
+        for sld in [self.sld_crop_t, self.sld_crop_b, self.sld_crop_l, self.sld_crop_r]:
+            sld.valueChanged.connect(on_slider_change)
         control_panel.addWidget(crop_group)
 
-        trans_group = QGroupBox("Orientation & Calibration")
-        trans_layout = QVBoxLayout(trans_group)
+        # Color Space Matrices Adjustments Grid
+        slider_group = QGroupBox("Color Tuning & Processing Matrix")
+        slider_grid = QGridLayout(slider_group)
+        slider_grid.setVerticalSpacing(4)
+        slider_grid.setHorizontalSpacing(8)
         
-        self.btn_rotate = QPushButton("⟳ Rotate 90°")
-        self.btn_rotate.setStyleSheet("background-color: #5c2d91; color: white; font-weight: bold; padding: 4px;")
-        self.btn_rotate.clicked.connect(on_rotate)
-        trans_layout.addWidget(self.btn_rotate)
-
-        self.btn_commit_crop = QPushButton("✂️ Commit Crop View: Unlocked")
-        self.btn_commit_crop.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; padding: 5px;")
-        self.btn_commit_crop.clicked.connect(on_commit_crop)
-        trans_layout.addWidget(self.btn_commit_crop)
-
-        self.btn_invert = QPushButton("🔄 Invert: Active")
-        self.btn_invert.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 4px;")
-        self.btn_invert.clicked.connect(on_invert_toggle)
-        trans_layout.addWidget(self.btn_invert)
-
-        self.btn_mono = QPushButton("🌈 Mode: Full Color")
-        self.btn_mono.setStyleSheet("background-color: #3a3a3a; font-weight: bold; padding: 4px;")
-        self.btn_mono.clicked.connect(on_mono_toggle)
-        trans_layout.addWidget(self.btn_mono)
-        control_panel.addWidget(trans_group)
-
-        slider_group = QGroupBox("Color Correction & Contrast")
-        slider_layout = QVBoxLayout(slider_group)
-        self.sld_cr = self.create_slider_row(slider_layout, "Cyan ◄─► Red [Q/A]", -100, 100)
-        self.sld_mg = self.create_slider_row(slider_layout, "Magenta ◄─► Green [W/S]", -100, 100)
-        self.sld_yb = self.create_slider_row(slider_layout, "Yellow ◄─► Blue [E/D]", -100, 100)
-        self.sld_exp = self.create_slider_row(slider_layout, "Exposure (Key) [R/F]", -100, 100)
-        self.sld_contrast = self.create_slider_row(slider_layout, "Contrast Scalar [T/G]", -100, 100)
+        self.sld_cr = self.create_grid_slider_row(slider_grid, "Cyan ◄─► Red", 0, 0, -100, 100, "Q/A")
+        self.sld_mg = self.create_grid_slider_row(slider_grid, "Magenta ◄─► Green", 1, 0, -100, 100, "W/S")
+        self.sld_yb = self.create_grid_slider_row(slider_grid, "Yellow ◄─► Blue", 2, 0, -100, 100, "E/D")
+        self.sld_exp = self.create_grid_slider_row(slider_grid, "Exposure (Key)", 3, 0, -100, 100, "R/F")
+        self.sld_contrast = self.create_grid_slider_row(slider_grid, "Contrast Scalar", 4, 0, -100, 100, "T/G")
         
         for sld in [self.sld_cr, self.sld_mg, self.sld_yb, self.sld_exp, self.sld_contrast]:
             sld.valueChanged.connect(on_slider_change)
         control_panel.addWidget(slider_group)
 
-        btn_layout = QHBoxLayout()
-        self.btn_auto = QPushButton("✨ Auto")
-        self.btn_reset = QPushButton("🔄 Reset")
-        self.btn_auto.setStyleSheet("background-color: #2e7d32; font-weight: bold; padding: 6px;")
-        self.btn_reset.setStyleSheet("background-color: #c62828; padding: 6px;")
-        self.btn_auto.clicked.connect(on_auto)
-        self.btn_reset.clicked.connect(on_reset)
-        btn_layout.addWidget(self.btn_auto)
-        btn_layout.addWidget(self.btn_reset)
-        control_panel.addLayout(btn_layout)
-
+        # Exporter Panel
         export_group = QGroupBox("Output Folder & Export")
         export_layout = QVBoxLayout(export_group)
         path_layout = QHBoxLayout()
@@ -141,12 +163,23 @@ class WorkspaceView(QWidget):
         control_panel.addStretch()
         main_layout.addLayout(control_panel, stretch=3)
 
-    def create_slider_row(self, layout, text, min_v=0, max_v=100):
-        lbl = QLabel(text)
+    def create_grid_slider_row(self, grid, label_text, row, col, min_v, max_v=100, shortcut_hint=None, default_val=0):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(1)
+        
+        header_text = f"{label_text} [{shortcut_hint}]" if shortcut_hint else label_text
+        lbl = QLabel(header_text)
+        lbl.setStyleSheet("color: #cccccc; font-size: 11px; font-weight: bold;")
+        
         sld = QSlider(Qt.Orientation.Horizontal)
         sld.setRange(min_v, max_v)
-        sld.setValue(0)
+        sld.setValue(default_val)
         sld.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        
         layout.addWidget(lbl)
         layout.addWidget(sld)
+        
+        grid.addWidget(container, row, col)
         return sld
