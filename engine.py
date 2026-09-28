@@ -145,7 +145,7 @@ class ImageEngine:
 
         full_output = self.run_math_pipeline(self.original_img, cr, mg, yb, exp, contrast)
         
-        h, w = full_output.shape[:2]
+        h, w, ch = full_output.shape
         t_pct = max(0, min(crop_t, 45))
         b_pct = max(0, min(crop_b, 45))
         l_pct = max(0, min(crop_l, 45))
@@ -161,4 +161,6 @@ class ImageEngine:
         else:
             final_crop = full_output
 
-        return cv2.imwrite(save_path, final_crop)
+        # FIX: Force a continuous memory layout block so OpenCV writes the file successfully
+        contiguous_output = np.ascontiguousarray(final_crop)
+        return cv2.imwrite(save_path, contiguous_output)

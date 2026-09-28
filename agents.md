@@ -56,7 +56,3 @@ The application is decoupled into independent, single-responsibility modules to 
 ### Phase A: Asynchronous Hardware Control (QThread)
 * A background hardware agent running on a decoupled thread away from PyQt's main loop.
 * Uses gphoto2 bindings to safely query USB ports, wake camera shutter operations asynchronously, and stream incoming raw files directly into the active folder track array.
-
-### Phase B: C-41 Matrix Calibration Auto-Gains
-* A sub-pipeline algorithm executing post-inversion to normalize color negative dye layer shifts.
-* Scans individual channel highlights to establish targeted white point modifiers before global adjustments occur.
